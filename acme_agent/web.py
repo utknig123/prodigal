@@ -45,9 +45,13 @@ def unpack(token):
 
 def view(conv, extra=None):
     s = conv.s
-    return {"token": pack(s), "transcript": s["transcript"], "trace": s["trace"][-80:], "plan": s["plan"],
+    audit = V.audit_record(s["record"], set(s.get("verified") or []))
+    plan = audit.to_dict()
+    focus = (audit.todo_fields() or audit.optional_missing or [""])[0]
+    return {"token": pack(s), "transcript": s["transcript"], "trace": s["trace"][-80:], "plan": plan,
             "record": s["record"], "initial": s["initial"], "saved": s["saved"], "ended": s["ended"],
             "outcome": s["outcome"], "identity": s["identity"], "candidate_id": s["cid"],
+            "focus": focus, "handoff": s.get("handoff"),
             "final_write_ok": s.get("final_write_ok", True), **(extra or {})}
 
 
@@ -84,7 +88,8 @@ def _api(method, route, body):
         except ValueError:
             raise ValueError("Body must be JSON")
     if route == "/api/health" and method == "GET":
-        out = {"ok": True, "llm": {"provider": llm.provider, "model": llm.model, "configured": llm.configured}}
+        chain = [{"provider": p, "model": m} for p, _b, _k, m in getattr(llm, "targets", [])]
+        out = {"ok": True, "llm": {"provider": llm.provider, "model": llm.model, "configured": llm.configured, "chain": chain}}
         try:
             db.schema()
             out["candidate_api_schema"] = "ok"
@@ -136,4 +141,11 @@ def _j(code, obj):
 
 
 def _h(ct):
-    return {"content-type": ct, "cache-control": "no-store", "x-content-type-options": "nosniff"}
+    return {
+        "content-type": ct,
+        "cache-control": "no-store",
+        "x-content-type-options": "nosniff",
+        "access-control-allow-origin": "*",
+        "access-control-allow-headers": "content-type",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+    }

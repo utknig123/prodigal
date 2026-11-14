@@ -12,6 +12,8 @@ Parameters:
   LlmModel: {Type: String, Default: ""}
   LlmFallbackModels: {Type: String, Default: ""}
   LlmApiKey: {Type: String, NoEcho: true}
+  GeminiApiKey: {Type: String, Default: "", NoEcho: true}
+  GeminiModel: {Type: String, Default: gemini-2.5-flash}
   SessionSecret: {Type: String, NoEcho: true}
 
 Resources:
@@ -44,6 +46,8 @@ Resources:
           LLM_MODEL: !Ref LlmModel
           LLM_FALLBACK_MODELS: !Ref LlmFallbackModels
           LLM_API_KEY: !Ref LlmApiKey
+          GEMINI_API_KEY: !Ref GeminiApiKey
+          GEMINI_MODEL: !Ref GeminiModel
           SESSION_SECRET: !Ref SessionSecret
       Code: {S3Bucket: !Ref ArtifactBucket, S3Key: !Ref ArtifactKey}
 
@@ -53,6 +57,12 @@ Resources:
       AuthType: NONE
       InvokeMode: BUFFERED
       TargetFunctionArn: !GetAtt Function.Arn
+      Cors:
+        AllowCredentials: false
+        AllowHeaders: [content-type]
+        AllowMethods: [GET, HEAD, POST]
+        AllowOrigins: ["*"]
+        MaxAge: 86400
 
   FunctionUrlPermission:
     Type: AWS::Lambda::Permission
@@ -61,6 +71,14 @@ Resources:
       Action: lambda:InvokeFunctionUrl
       Principal: "*"
       FunctionUrlAuthType: NONE
+
+  PublicInvoke:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref Function
+      Action: lambda:InvokeFunction
+      Principal: "*"
+      InvokedViaFunctionUrl: true
 
 Outputs:
   FunctionUrl: {Description: Public HTTPS URL, Value: !GetAtt FunctionUrl.FunctionUrl}

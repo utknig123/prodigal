@@ -1,4 +1,5 @@
 import datetime as dt
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -6,7 +7,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from acme_agent import validators as V  # noqa: E402
-from acme_agent.agent import Conversation  # noqa: E402
+from acme_agent.agent import Conversation, _misses_field, looks_garbled  # noqa: E402
 from harness.fakes import FakeDB, ScriptedLLM  # noqa: E402
 
 TODAY = dt.date(2026, 11, 14)
@@ -138,6 +139,21 @@ class AgentGuards(unittest.TestCase):
         c, db = conv("c008", [])
         c.abandon("x")
         self.assertEqual(db.rows["c008"]["attempt_count"], 50)
+
+    def test_off_topic_answer_is_flagged(self):
+        self.assertTrue(_misses_field("email", "haha I like cricket"))
+        self.assertFalse(_misses_field("email", "use meera at college dot edu"))
+        self.assertTrue(_misses_field("cgpa", "I graduate next year"))
+        self.assertFalse(_misses_field("cgpa", "it's 8.6"))
+
+    def test_garbled_reply_never_reaches_history(self):
+        junk = "xq" * 80
+        self.assertTrue(looks_garbled(junk))
+        c, _ = conv("c001", [junk, junk], identity=True)
+        spoken = c.turn("lol")
+        self.assertNotIn(junk[:12], spoken)
+        self.assertNotIn(junk[:12], json.dumps(c.s["messages"]))
+        self.assertIn("your application", spoken)
 
     def test_autofix_piggybacks(self):
         c, db = conv("c005", [])

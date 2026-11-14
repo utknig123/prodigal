@@ -6,10 +6,11 @@
 <title>ACME Intake Agent</title>
 <link rel="icon" href="favicon.svg">
 <link rel="stylesheet" href="styles.css">
+<script src="config.js"></script>
 </head>
 <body>
 <header class="top">
-  <div class="brand"><span class="logo">A</span><div><b>ACME Intake Agent</b><small>Autonomous candidate information collection</small></div></div>
+  <div class="brand"><span class="logo">Ac</span><div><b>ACME desk</b><small>Internship intake, one conversation</small></div></div>
   <div class="top-actions">
     <span id="health" class="pill">checking…</span>
     <button id="reset" class="ghost" title="Restore the original seed data of your workspace">Reset data</button>
@@ -28,7 +29,9 @@
   </section>
 
   <section id="p-chat" class="panel chat">
-    <div class="chat-head"><div class="avatar" id="av">?</div><div><b id="ch-name">No chat yet</b><small id="ch-sub">Pick a candidate to start. You play the candidate.</small></div>
+    <div class="chat-head"><div class="avatar" id="av">?</div><div><b id="ch-name">No chat yet</b><small id="ch-sub">Pick a candidate. You type as them.</small>
+      <span id="focus" class="focus" hidden></span>
+      <span class="meter" aria-hidden="true"><i id="progress"></i></span></div>
       <button id="leave" class="ghost danger" hidden>Leave chat</button></div>
     <div id="msgs" class="msgs" aria-live="polite"><div class="empty">Choose a candidate on the left. The agent reads the record, decides what to collect and opens the conversation. If nothing is needed, no chat starts.</div></div>
     <div id="banner" class="banner" hidden></div>
@@ -36,10 +39,11 @@
   </section>
 
   <section id="p-insp" class="panel insp">
-    <div class="itabs"><button class="on" data-t="t-act">Activity</button><button data-t="t-rec">Record</button><button data-t="t-plan">Plan</button></div>
-    <div id="t-act" class="tab on"><p class="muted">Tool calls, validations and database writes appear here.</p></div>
+    <div class="itabs"><button class="on" data-t="t-act">Activity</button><button data-t="t-rec">Record</button><button data-t="t-plan">Plan</button><button data-t="t-ledger">Ledger</button></div>
+    <div id="t-act" class="tab on"><p class="muted">Tool calls, blocked drafts, and database writes show up here. A blocked draft is never sent to the candidate.</p></div>
     <div id="t-rec" class="tab"></div>
     <div id="t-plan" class="tab"></div>
+    <div id="t-ledger" class="tab"></div>
   </section>
 </main>
 <script src="app.js"></script>

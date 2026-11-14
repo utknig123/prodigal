@@ -87,7 +87,10 @@ def deploy():
               "CandidateApiUrl": os.environ.get("CANDIDATE_API_URL", "https://candidate-db-api.service.external.usea2.aws.prodigaltech.com"),
               "CandidateApiKey": os.environ["CANDIDATE_API_KEY"], "LlmProvider": os.environ.get("LLM_PROVIDER", "groq"),
               "LlmModel": os.environ.get("LLM_MODEL", ""), "LlmFallbackModels": os.environ.get("LLM_FALLBACK_MODELS", ""),
-              "LlmApiKey": os.environ["LLM_API_KEY"], "SessionSecret": secret}
+              "LlmApiKey": os.environ["LLM_API_KEY"],
+              "GeminiApiKey": os.environ.get("GEMINI_API_KEY", ""),
+              "GeminiModel": os.environ.get("GEMINI_MODEL", "gemini-2.5-flash"),
+              "SessionSecret": secret}
     pf = BUILD / "params.json"
     pf.write_text(json.dumps([{"ParameterKey": k, "ParameterValue": v} for k, v in params.items()]))
     try:

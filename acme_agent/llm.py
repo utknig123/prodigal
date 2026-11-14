@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 import urllib.error
 import urllib.request
@@ -77,33 +78,63 @@ class LLM:
         self.fallback_models = fallback_models or [
             item.strip() for item in raw_fallback.split(",") if item.strip()
         ]
-        if not self.fallback_models:
-            self.fallback_models = ["openai/gpt-oss-120b", "qwen/qwen3.8-27b"]
         self.timeout = timeout
         self.sleep = sleep
+        self.targets = self._targets()
 
     @property
     def configured(self) -> bool:
         return bool(self.api_key)
 
+    def _targets(self):
+        """Three slots: Groq primary, Groq backup, then Gemini if a key exists else a third Groq model."""
+        groq_key = self.api_key
+        groq_base = PROVIDERS["groq"]
+        primary = (self.provider, self.base_url, groq_key, self.model)
+        if self.provider != "groq":
+            primary = (self.provider, self.base_url, groq_key, self.model)
+        second_model = next((m for m in self.fallback_models if m and m != self.model), "openai/gpt-oss-120b")
+        second = ("groq", groq_base, groq_key, second_model)
+        gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
+        if gemini_key:
+            third = ("gemini", PROVIDERS["gemini"], gemini_key, os.environ.get("GEMINI_MODEL", "gemini-2.5-flash").strip())
+        else:
+            third_model = "qwen/qwen3.8-27b"
+            for name in self.fallback_models:
+                if name and name not in {self.model, second_model}:
+                    third_model = name
+                    break
+            third = ("groq", groq_base, groq_key, third_model)
+        seen = set()
+        targets = []
+        for item in (primary, second, third):
+            key = (item[1], item[3])
+            if item[2] and key not in seen:
+                seen.add(key)
+                targets.append(item)
+        return targets[:3]
+
     def chat(self, messages, tools=None, **kw) -> Reply:
         if not self.configured:
             raise LLMError("LLM_API_KEY is empty", 401)
-        models = [self.model] + [m for m in self.fallback_models if m != self.model]
         last: Exception | None = None
-        for index, model in enumerate(models):
+        for index, (provider, base, key, model) in enumerate(self.targets):
             try:
-                return self._complete(model, messages, tools, kw)
-            except ToolFormatError:
-                raise
-            except LLMError as exc:
+                reply = self._complete(base, key, model, messages, tools, kw)
+            except (ToolFormatError, LLMError) as exc:
                 last = exc
-                if exc.status in {429, 500, 502, 503, 504} and index < len(models) - 1:
-                    self.sleep(min(8, 1.5 * (index + 1)))
-                    continue
-                if exc.status == 400 and "model" in str(exc).lower() and index < len(models) - 1:
+                if index < len(self.targets) - 1:
+                    self.sleep(min(4, 1.0 * (index + 1)))
                     continue
                 raise
+            if reply.tool_calls or not _garbled(reply.content):
+                self.model = model
+                self.provider = provider
+                return reply
+            last = LLMError("model reply was not readable", 422)
+            if index < len(self.targets) - 1:
+                self.sleep(0.5)
+                continue
         raise last or LLMError("all models failed")
 
     def ping(self) -> str:
@@ -145,29 +176,29 @@ class LLM:
             return []
         return [str(row["id"]).removeprefix("models/") for row in rows if isinstance(row, dict) and row.get("id")]
 
-    def _complete(self, model: str, messages, tools, kw) -> Reply:
+    def _complete(self, base: str, key: str, model: str, messages, tools, kw) -> Reply:
         payload = {
             "model": model,
             "messages": messages,
-            "temperature": kw.get("temperature", 0.2),
+            "temperature": kw.get("temperature", 0.4),
             "max_tokens": kw.get("max_tokens", 800),
         }
         if tools:
             payload["tools"] = tools
             payload["tool_choice"] = kw.get("tool_choice", "auto")
-        body = self._request("POST", "/chat/completions", payload)
+        body = self._request("POST", "/chat/completions", payload, base=base, key=key)
         return _parse_reply(body, model)
 
-    def _request(self, method: str, path: str, payload: dict | None) -> dict:
+    def _request(self, method: str, path: str, payload: dict | None, base: str | None = None, key: str | None = None) -> dict:
         data = None if payload is None else json.dumps(payload).encode("utf-8")
         headers = {
-            "Authorization": f"Bearer {self.api_key}",
+            "Authorization": f"Bearer {key or self.api_key}",
             "Accept": "application/json",
             "User-Agent": "acme-intake-agent/1.0",
         }
         if data is not None:
             headers["Content-Type"] = "application/json"
-        request = urllib.request.Request(self.base_url + path, data=data, headers=headers, method=method)
+        request = urllib.request.Request((base or self.base_url) + path, data=data, headers=headers, method=method)
         delays = (0.0, 1.0, 2.0)
         last_error: LLMError | None = None
         for attempt, delay in enumerate(delays):
@@ -259,6 +290,22 @@ def assistant_message(turn: LLMTurn) -> dict:
             for call in turn.tool_calls
         ],
     }
+
+
+def _garbled(text: str) -> bool:
+    t = (text or "").strip()
+    if not t:
+        return True
+    if len(t) > 700:
+        return True
+    if re.search(r"[\x00-\x08]", t):
+        return True
+    if re.search(r"tool_calls|\"evidence\"\s*:|<\s*function", t, re.I):
+        return True
+    letters = sum(ch.isalpha() or ch.isspace() for ch in t)
+    if len(t) > 24 and letters / len(t) < 0.5:
+        return True
+    return bool(re.search(r"(.{3,}?)\1{5,}", t))
 
 
 def _parse_reply(body: dict, fallback_model: str) -> Reply:

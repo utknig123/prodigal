@@ -3,8 +3,9 @@ const FIELDS = ["full_name","phone","email","college","degree","branch","graduat
 let token = null, busy = false, idleTimer = null, selected = null;
 const IDLE_MS = 5 * 60 * 1000;
 
+const API = String(window.ACME_API || "").replace(/\/$/, "");
 async function api(path, body) {
-  const r = await fetch("/api/" + path, { method: body ? "POST" : "GET", headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+  const r = await fetch(API + "/api/" + path, { method: body ? "POST" : "GET", headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
   const j = await r.json().catch(() => ({ error: "Bad response" }));
   if (!r.ok) throw new Error(j.error || r.statusText);
   return j;
@@ -17,7 +18,8 @@ async function health() {
   try {
     const h = await api("health");
     const ok = h.llm.configured && h.candidate_api_auth === "ok";
-    el.textContent = ok ? `Ready · ${h.llm.model}` : !h.llm.configured ? "LLM key missing" : "Candidate API: " + h.candidate_api_auth;
+    const chain = (h.llm.chain || []).map((c) => c.model).join(" → ");
+    el.textContent = ok ? `Ready · ${chain || h.llm.model}` : !h.llm.configured ? "LLM key missing" : "Candidate API: " + h.candidate_api_auth;
     el.className = "pill " + (ok ? "ok" : "bad");
   } catch (e) { el.textContent = "Server unreachable"; el.className = "pill bad"; }
 }
@@ -50,7 +52,15 @@ function render(v) {
   v.transcript.forEach((m) => addMsg(m.role, m.text, m.ts));
   $("#ch-name").textContent = v.record.full_name;
   $("#av").textContent = (v.record.full_name || "?")[0];
-  $("#ch-sub").textContent = `${v.candidate_id} · ${v.ended ? "chat ended" : "online"}`;
+  $("#ch-sub").textContent = `${v.candidate_id} · ${v.ended ? "chat ended" : "in conversation"}`;
+  const focus = $("#focus");
+  if (focus) {
+    if (!v.ended && v.focus) { focus.hidden = false; focus.textContent = "Asking for " + v.focus.replaceAll("_", " "); }
+    else focus.hidden = true;
+  }
+  const open = (v.plan.missing || []).length + (v.plan.invalid || []).length + (v.plan.confirm || []).length;
+  const bar = $("#progress");
+  if (bar) bar.style.width = (v.ended ? 100 : Math.max(8, Math.round(100 * (1 - open / 9)))) + "%";
   $("#leave").hidden = v.ended;
   $("#text").disabled = $("#composer button").disabled = v.ended;
   const b = $("#banner");
@@ -58,9 +68,16 @@ function render(v) {
     const o = v.outcome;
     b.hidden = false;
     b.className = "banner " + (o === "completed" ? "completed" : o === "needs_human" || o === "refused" ? "bad" : "");
+    const hand = v.handoff;
     b.textContent = `Outcome recorded: ${o}` + (v.final_write_ok === false ? " — WARNING: final database write failed" : "");
+    if (hand && hand.next_question) {
+      const extra = document.createElement("div");
+      extra.className = "handoff";
+      extra.textContent = `Handoff: ${hand.next_question} Still needed: ${(hand.still_needed || []).join(", ") || "none"}.`;
+      b.appendChild(extra);
+    }
   } else b.hidden = true;
-  renderTrace(v.trace); renderRecord(v); renderPlan(v.plan);
+  renderTrace(v.trace); renderRecord(v); renderPlan(v.plan); renderLedger(v.trace);
   clearTimeout(idleTimer);
   if (!v.ended) idleTimer = setTimeout(() => leave("no reply / idle timeout"), IDLE_MS);
 }
@@ -91,7 +108,20 @@ function renderRecord(v) {
 }
 function renderPlan(p) {
   const li = (a) => a.length ? a.map((x) => `<li>${esc(typeof x === "string" ? x : `${x.field}: ${x.value} — ${x.reason}`)}</li>`).join("") : "<li class='muted'>none</li>";
-  $("#t-plan").innerHTML = `<h4>Missing</h4><ul>${li(p.missing)}</ul><h4>Existing data that looks wrong</h4><ul>${li(p.invalid)}</ul><h4>Needs confirmation</h4><ul>${li(p.confirm)}</ul><h4>Auto-normalised</h4><ul>${li(Object.entries(p.autofix).map(([k, v]) => `${k} → ${v}`))}</ul><h4>Optional, ask once</h4><ul>${li(p.optional_missing)}</ul>`;
+  $("#t-plan").innerHTML = `<h4>Missing</h4><ul>${li(p.missing)}</ul><h4>Existing data that looks wrong</h4><ul>${li(p.invalid)}</ul><h4>Needs confirmation</h4><ul>${li(p.confirm)}</ul><h4>Auto-normalised</h4><ul>${li(Object.entries(p.autofix || {}).map(([k, val]) => `${k} → ${val}`))}</ul><h4>Optional, ask once</h4><ul>${li(p.optional_missing)}</ul>`;
+}
+function renderLedger(trace) {
+  const box = $("#t-ledger");
+  if (!box) return;
+  const cards = [];
+  for (const e of trace || []) {
+    if (e.t !== "tool" || e.name !== "save_fields") continue;
+    for (const row of (e.result && e.result.results) || []) {
+      const quote = ((e.args && e.args.fields) || []).find((f) => f.field === row.field);
+      cards.push(`<div class="ledger"><b>${esc(row.field)} · ${esc(row.status)}</b><div>${esc(fmt(row.value))}</div>${quote && quote.evidence ? `<q>“${esc(quote.evidence)}”</q>` : ""}</div>`);
+    }
+  }
+  box.innerHTML = cards.join("") || '<p class="muted">Nothing has been written yet. Each save shows the value and the candidate’s exact words.</p>';
 }
 
 async function start(id) {
@@ -105,7 +135,7 @@ async function start(id) {
     if (v.no_action) {
       $("#msgs").innerHTML = `<div class="empty"><b>${esc(v.record.full_name)}</b>'s record is already complete and valid, so no conversation was started.<br>Status set to <b>completed</b> without contacting them.</div>`;
       $("#ch-name").textContent = v.record.full_name; $("#ch-sub").textContent = id + " · nothing to collect";
-      renderTrace(v.trace); renderRecord(v); renderPlan(v.plan); $("#text").disabled = true; $("#leave").hidden = true;
+      renderTrace(v.trace); renderRecord(v); renderPlan(v.plan); renderLedger(v.trace); $("#text").disabled = true; $("#leave").hidden = true;
     } else { render(v); $("#text").focus(); }
   } catch (e) { typing(false); $("#msgs").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
   busy = false; loadCands();
@@ -138,6 +168,6 @@ document.querySelectorAll(".itabs button").forEach((b) => b.addEventListener("cl
   document.querySelectorAll(".itabs button,.tab").forEach((x) => x.classList.remove("on")); b.classList.add("on"); $("#" + b.dataset.t).classList.add("on");
 }));
 document.querySelectorAll("#mtabs button").forEach((b) => b.addEventListener("click", () => setPanel(b.dataset.p)));
-window.addEventListener("pagehide", () => { if (token) navigator.sendBeacon("/api/leave", new Blob([JSON.stringify({ token, reason: "candidate closed the page" })], { type: "application/json" })); });
+window.addEventListener("pagehide", () => { if (token) navigator.sendBeacon(API + "/api/leave", new Blob([JSON.stringify({ token, reason: "candidate closed the page" })], { type: "application/json" })); });
 if (matchMedia("(max-width:760px)").matches) setPanel("p-list");
 health(); loadCands();
