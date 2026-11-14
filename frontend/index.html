@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ACME Intake Agent</title>
+<link rel="icon" href="favicon.svg">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="logo">A</span><div><b>ACME Intake Agent</b><small>Autonomous candidate information collection</small></div></div>
+  <div class="top-actions">
+    <span id="health" class="pill">checking…</span>
+    <button id="reset" class="ghost" title="Restore the original seed data of your workspace">Reset data</button>
+  </div>
+</header>
+
+<nav class="tabs-m" id="mtabs">
+  <button data-p="p-list" class="on">Candidates</button><button data-p="p-chat">Chat</button><button data-p="p-insp">Agent view</button>
+</nav>
+
+<main class="grid">
+  <section id="p-list" class="panel list">
+    <h2>Candidates</h2>
+    <form id="manual"><input id="cid" placeholder="Candidate ID, e.g. c001" autocomplete="off"><button class="primary">Start</button></form>
+    <div id="cands" class="cands"><p class="muted">Loading…</p></div>
+  </section>
+
+  <section id="p-chat" class="panel chat">
+    <div class="chat-head"><div class="avatar" id="av">?</div><div><b id="ch-name">No chat yet</b><small id="ch-sub">Pick a candidate to start. You play the candidate.</small></div>
+      <button id="leave" class="ghost danger" hidden>Leave chat</button></div>
+    <div id="msgs" class="msgs" aria-live="polite"><div class="empty">Choose a candidate on the left. The agent reads the record, decides what to collect and opens the conversation. If nothing is needed, no chat starts.</div></div>
+    <div id="banner" class="banner" hidden></div>
+    <form id="composer" class="composer"><input id="text" placeholder="Reply as the candidate…" autocomplete="off" disabled><button class="primary" disabled>Send</button></form>
+  </section>
+
+  <section id="p-insp" class="panel insp">
+    <div class="itabs"><button class="on" data-t="t-act">Activity</button><button data-t="t-rec">Record</button><button data-t="t-plan">Plan</button></div>
+    <div id="t-act" class="tab on"><p class="muted">Tool calls, validations and database writes appear here.</p></div>
+    <div id="t-rec" class="tab"></div>
+    <div id="t-plan" class="tab"></div>
+  </section>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,175 @@
+{
+  "mandatory_fields": [
+    "full_name",
+    "phone",
+    "email",
+    "college",
+    "degree",
+    "branch",
+    "graduation_year",
+    "cgpa",
+    "preferred_location",
+    "available_from",
+    "internship_duration_months"
+  ],
+  "collection_statuses": [
+    "pending",
+    "in_progress",
+    "completed",
+    "no_answer",
+    "refused",
+    "needs_human"
+  ],
+  "validation": "The API does not validate field values. It stores whatever you send. Enforcing these rules is your agent's job.",
+  "fields": [
+    {
+      "name": "id",
+      "type": "string",
+      "mandatory": true,
+      "writable": false,
+      "rules": "Assigned by the server, e.g. c001."
+    },
+    {
+      "name": "full_name",
+      "type": "string",
+      "mandatory": true,
+      "writable": true,
+      "rules": "2-100 chars. Always present in seed data."
+    },
+    {
+      "name": "phone",
+      "type": "string (E.164)",
+      "mandatory": true,
+      "writable": false,
+      "rules": "OTP-verified at form submission. Read-only."
+    },
+    {
+      "name": "email",
+      "type": "string",
+      "mandatory": true,
+      "writable": true,
+      "rules": "Valid email address, max 254 chars."
+    },
+    {
+      "name": "college",
+      "type": "string",
+      "mandatory": true,
+      "writable": true,
+      "rules": "2-150 chars."
+    },
+    {
+      "name": "degree",
+      "type": "enum",
+      "mandatory": true,
+      "writable": true,
+      "rules": "One of: B.Tech, B.E., B.Sc, BCA, MBA Tech, MCA, M.Tech, Other"
+    },
+    {
+      "name": "branch",
+      "type": "string",
+      "mandatory": true,
+      "writable": true,
+      "rules": "Specialisation / stream, 2-100 chars, e.g. 'Computer Engineering'."
+    },
+    {
+      "name": "graduation_year",
+      "type": "integer",
+      "mandatory": true,
+      "writable": true,
+      "rules": "2026-2028 inclusive."
+    },
+    {
+      "name": "cgpa",
+      "type": "number",
+      "mandatory": true,
+      "writable": true,
+      "rules": "0.0-10.0 on a 10-point scale, stored to 2 decimals."
+    },
+    {
+      "name": "preferred_location",
+      "type": "enum",
+      "mandatory": true,
+      "writable": true,
+      "rules": "One of: Mumbai, Bengaluru, Remote, No preference"
+    },
+    {
+      "name": "available_from",
+      "type": "date (YYYY-MM-DD)",
+      "mandatory": true,
+      "writable": true,
+      "rules": "2026-01-01 to 2027-12-31."
+    },
+    {
+      "name": "internship_duration_months",
+      "type": "enum (integer)",
+      "mandatory": true,
+      "writable": true,
+      "rules": "One of: 2, 3, 6"
+    },
+    {
+      "name": "linkedin_url",
+      "type": "string (URL)",
+      "mandatory": false,
+      "writable": true,
+      "rules": "A linkedin.com URL."
+    },
+    {
+      "name": "github_url",
+      "type": "string (URL)",
+      "mandatory": false,
+      "writable": true,
+      "rules": "A github.com profile URL."
+    },
+    {
+      "name": "skills",
+      "type": "array of strings",
+      "mandatory": false,
+      "writable": true,
+      "rules": "Up to 30 items, each 1-50 chars."
+    },
+    {
+      "name": "collection_status",
+      "type": "enum",
+      "mandatory": false,
+      "writable": true,
+      "rules": "One of: pending, in_progress, completed, no_answer, refused, needs_human. Defaults to 'pending'."
+    },
+    {
+      "name": "attempt_count",
+      "type": "integer",
+      "mandatory": false,
+      "writable": true,
+      "rules": "0-50. Defaults to 0."
+    },
+    {
+      "name": "last_contacted_at",
+      "type": "datetime (ISO 8601)",
+      "mandatory": false,
+      "writable": true,
+      "rules": "Include a timezone offset."
+    },
+    {
+      "name": "notes",
+      "type": "string",
+      "mandatory": false,
+      "writable": true,
+      "rules": "Free text, max 4000 chars."
+    },
+    {
+      "name": "version",
+      "type": "integer",
+      "mandatory": false,
+      "writable": false,
+      "rules": "Increments on every change. Send it as If-Match to avoid lost updates."
+    },
+    {
+      "name": "updated_at",
+      "type": "datetime",
+      "mandatory": false,
+      "writable": false,
+      "rules": "Server timestamp of the last change."
+    }
+  ],
+  "concurrency": "Send the record's `version` as an If-Match header on PATCH; a stale version returns 409.",
+  "idempotency": "Send an Idempotency-Key header on PATCH; a retry with the same key and body replays the original response without applying it twice."
+}

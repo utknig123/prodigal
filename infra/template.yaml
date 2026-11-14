@@ -1,0 +1,67 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: ACME intake agent - Lambda (Python 3.12) behind a public HTTPS Function URL. Serves the chat UI and /api/*.
+
+Parameters:
+  ArtifactBucket: {Type: String}
+  ArtifactKey: {Type: String}
+  ProjectName: {Type: String, Default: prodigal, AllowedPattern: "^[a-z0-9-]+$"}
+  EnvironmentName: {Type: String, Default: dev, AllowedPattern: "^[a-z0-9-]+$"}
+  CandidateApiUrl: {Type: String, Default: "https://candidate-db-api.service.external.usea2.aws.prodigaltech.com"}
+  CandidateApiKey: {Type: String, NoEcho: true}
+  LlmProvider: {Type: String, Default: groq}
+  LlmModel: {Type: String, Default: ""}
+  LlmFallbackModels: {Type: String, Default: ""}
+  LlmApiKey: {Type: String, NoEcho: true}
+  SessionSecret: {Type: String, NoEcho: true}
+
+Resources:
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-${EnvironmentName}-lambda"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - {Effect: Allow, Principal: {Service: lambda.amazonaws.com}, Action: "sts:AssumeRole"}
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  Function:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}"
+      Description: ACME candidate intake agent (chat UI + API)
+      Runtime: python3.12
+      Handler: acme_agent.handler.lambda_handler
+      Role: !GetAtt ExecutionRole.Arn
+      Timeout: 120
+      MemorySize: 256
+      Environment:
+        Variables:
+          CANDIDATE_API_URL: !Ref CandidateApiUrl
+          CANDIDATE_API_KEY: !Ref CandidateApiKey
+          LLM_PROVIDER: !Ref LlmProvider
+          LLM_MODEL: !Ref LlmModel
+          LLM_FALLBACK_MODELS: !Ref LlmFallbackModels
+          LLM_API_KEY: !Ref LlmApiKey
+          SESSION_SECRET: !Ref SessionSecret
+      Code: {S3Bucket: !Ref ArtifactBucket, S3Key: !Ref ArtifactKey}
+
+  FunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      AuthType: NONE
+      InvokeMode: BUFFERED
+      TargetFunctionArn: !GetAtt Function.Arn
+
+  FunctionUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref Function
+      Action: lambda:InvokeFunctionUrl
+      Principal: "*"
+      FunctionUrlAuthType: NONE
+
+Outputs:
+  FunctionUrl: {Description: Public HTTPS URL, Value: !GetAtt FunctionUrl.FunctionUrl}
+  FunctionName: {Value: !Ref Function}
